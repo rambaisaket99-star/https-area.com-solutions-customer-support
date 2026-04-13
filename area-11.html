@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Area — AI for Customer Support</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#faf9f6;--bg2:#f3f1eb;--white:#ffffff;
+  --border:#dedad0;--border2:#ccc8bc;
+  --text:#19190f;--text2:#48483a;--text3:#78786a;--text4:#a8a89a;
+  --accent:#c8773a;
+  --font:'DM Sans','Helvetica Neue',sans-serif;
+  --serif:'DM Serif Display',Georgia,serif;
+  --nav-h:60px;
+}
+html,body{height:100%;background:var(--bg)}
+body{color:var(--text);font-family:var(--font);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{text-decoration:none;color:inherit}
+button{cursor:pointer;font-family:var(--font)}
+ul{list-style:none}
+
+/* ══ LOGIN GATE ══ */
+#gate{
+  position:fixed;inset:0;z-index:9000;
+  background:var(--bg);
+  display:flex;align-items:center;justify-content:center;
+  opacity:1;
+  transition:opacity .42s cubic-bezier(.4,0,.2,1);
+}
+#gate.gate-out{opacity:0;pointer-events:none}
+#gate.gate-gone{display:none}
+
+.gate-box{
+  width:100%;max-width:400px;
+  padding:52px 44px 44px;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  animation:gUp .5s cubic-bezier(.22,.68,0,1.2) both;
+}
+@keyframes gUp{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+
+.gate-logo{display:flex;align-items:center;gap:10px;margin-bottom:40px}
+.gate-logo-name{font-size:24px;font-weight:600;letter-spacing:-.04em;color:var(--text)}
+.gate-title{font-family:var(--serif);font-size:42px;font-weight:400;letter-spacing:-.03em;line-height:1.1;color:var(--text);margin-bottom:11px}
+.gate-sub{font-size:14.5px;color:var(--text3);line-height:1.7;font-weight:300;margin-bottom:36px;max-width:300px}
+.gate-rule{width:100%;height:1px;background:var(--border);margin-bottom:28px}
+
+.btn-g{
+  display:flex;align-items:center;justify-content:center;gap:11px;
+  width:100%;padding:11.5px 20px;border-radius:9px;
+  font-size:14.5px;font-weight:500;letter-spacing:-.01em;
+  background:var(--white);color:var(--text);border:1.5px solid var(--border);
+  box-shadow:0 1px 6px rgba(0,0,0,.06);
+  transition:border-color .15s,box-shadow .15s,transform .15s;
+}
+.btn-g:hover:not(:disabled){border-color:var(--border2);box-shadow:0 4px 14px rgba(0,0,0,.1);transform:translateY(-1px)}
+.btn-g:active:not(:disabled){transform:translateY(0)}
+.btn-g:disabled{opacity:.55;cursor:default}
+
+.btn-demo{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  width:100%;padding:10px 20px;border-radius:9px;margin-top:10px;
+  font-size:13.5px;font-weight:500;letter-spacing:-.01em;
+  background:transparent;color:var(--text3);border:1.5px dashed var(--border);
+  transition:border-color .15s,color .15s;
+}
+.btn-demo:hover{border-color:var(--border2);color:var(--text2)}
+
+.gate-load{display:none;align-items:center;justify-content:center;gap:9px;font-size:13px;color:var(--text4);margin-top:14px}
+.gate-load.on{display:flex}
+.spin{width:14px;height:14px;border-radius:50%;border:2px solid var(--border);border-top-color:var(--text3);animation:spin .65s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.gate-err{width:100%;margin-top:12px;background:#fff5f4;border:1px solid #fdd;border-radius:8px;padding:9px 13px;font-size:13px;color:#c0392b;display:none;text-align:left;line-height:1.5}
+.gate-err.on{display:block}
+.gate-terms{font-size:12px;color:var(--text4);margin-top:20px;line-height:1.6}
+.gate-terms a{color:var(--text3);text-decoration:underline;cursor:pointer}
+.gate-firebase-note{font-size:11.5px;color:var(--text4);margin-top:16px;padding:10px 13px;background:var(--bg2);border-radius:8px;border:1px solid var(--border);text-align:left;line-height:1.6;display:none}
+.gate-firebase-note.on{display:block}
+.gate-firebase-note code{font-size:10.5px;background:var(--border);padding:1px 4px;border-radius:3px;font-family:monospace}
+
+/* ══ MAIN SITE ══ */
+#site{opacity:0;transition:opacity .4s cubic-bezier(.4,0,.2,1)}
+#site.site-in{opacity:1}
+
+/* ── PAGE SYSTEM ── */
+.page{display:none;opacity:0;transform:translateY(12px);transition:opacity .35s ease,transform .35s ease;min-height:calc(100vh - var(--nav-h))}
+.page.active{display:block;opacity:1;transform:translateY(0)}
+@keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.page.animate{animation:pageIn .38s ease both}
+
+/* ── NAVBAR ── */
+nav{position:sticky;top:0;z-index:200;height:var(--nav-h);background:rgba(250,249,246,.93);backdrop-filter:blur(14px);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 32px;gap:0}
+.nav-brand{display:flex;align-items:center;gap:9px;margin-right:36px;flex-shrink:0;cursor:pointer}
+.nav-brand-name{font-size:18px;font-weight:600;letter-spacing:-.03em;color:var(--text)}
+.nav-links{display:flex;align-items:center;gap:1px;flex:1}
+.nav-link{padding:7px 13px;border-radius:7px;font-size:14px;font-weight:400;color:var(--text2);cursor:pointer;transition:background .12s,color .12s;white-space:nowrap;display:flex;align-items:center;gap:4px;position:relative}
+.nav-link:hover{background:var(--bg2);color:var(--text)}
+.nav-link .ch{opacity:.45;font-size:10px}
+.dropdown{position:absolute;top:calc(100% + 8px);left:0;background:var(--white);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.1);padding:8px;min-width:200px;display:none;z-index:300}
+.nav-link:hover .dropdown{display:block}
+.dropdown a{display:block;padding:8px 12px;border-radius:7px;font-size:13.5px;color:var(--text2);transition:background .1s,color .1s;cursor:pointer}
+.dropdown a:hover{background:var(--bg2);color:var(--text)}
+.nav-actions{display:flex;align-items:center;gap:8px;margin-left:auto;flex-shrink:0}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 17px;border-radius:8px;font-size:14px;font-weight:500;border:none;transition:all .14s;letter-spacing:-.01em;white-space:nowrap}
+.btn-outline{background:transparent;color:var(--text);border:1px solid var(--border2)}.btn-outline:hover{background:var(--bg2)}
+.btn-dark{background:var(--text);color:var(--white)}.btn-dark:hover{background:#2c2c20;box-shadow:0 3px 14px rgba(0,0,0,.18)}
+
+/* ── USER AVATAR ── */
+.u-wrap{position:relative}
+.u-avatar{width:33px;height:33px;border-radius:50%;border:1.5px solid var(--border);cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--bg2);transition:border-color .13s;flex-shrink:0}
+.u-avatar:hover{border-color:var(--border2)}
+.u-avatar img{width:100%;height:100%;object-fit:cover}
+.u-initial{font-size:13px;font-weight:600;color:var(--text2)}
+.u-drop{position:absolute;top:calc(100% + 10px);right:0;background:var(--white);border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.1);padding:8px;min-width:210px;display:none;z-index:400}
+.u-wrap:hover .u-drop{display:block}
+.u-info{padding:10px 12px;border-bottom:1px solid var(--border);margin-bottom:6px}
+.u-name{font-size:13.5px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.u-email{font-size:12px;color:var(--text3);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.u-drop a{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:7px;font-size:13.5px;color:var(--text2);cursor:pointer;transition:background .1s}
+.u-drop a:hover{background:var(--bg2);color:var(--text)}
+.u-out{color:#b73a2e!important}.u-out:hover{background:#fff5f4!important;color:#b73a2e!important}
+.demo-badge{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;background:var(--accent);color:#fff;padding:2px 6px;border-radius:4px;margin-left:4px}
+
+/* ── BREADCRUMB ── */
+.breadcrumb{padding:13px 32px;display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text3);border-bottom:1px solid var(--border);background:var(--white)}
+.breadcrumb span.sep{color:var(--text4)}.breadcrumb span.cur{color:var(--text);font-weight:500}
+.bc-link{cursor:pointer;transition:color .12s}.bc-link:hover{color:var(--text)}
+
+/* ── HERO ── */
+.hero{padding:92px 32px 84px;max-width:1120px;margin:0 auto}
+.hero h1{font-family:var(--serif);font-size:clamp(46px,6.5vw,76px);font-weight:400;letter-spacing:-.035em;line-height:1.06;max-width:780px;margin-bottom:26px;color:var(--text)}
+.hero h1 em{font-style:italic;color:var(--text3)}
+.hero-sub{font-size:17px;color:var(--text2);max-width:500px;line-height:1.7;margin-bottom:38px;font-weight:300}
+.hero-ctas{display:flex;gap:11px;flex-wrap:wrap}
+.btn-hero{padding:11px 24px;border-radius:9px;font-size:15px;font-weight:500;border:none;letter-spacing:-.01em;transition:all .16s}
+.btn-hero-p{background:var(--text);color:var(--white)}.btn-hero-p:hover{background:#2c2c20;box-shadow:0 5px 20px rgba(0,0,0,.16);transform:translateY(-1px)}
+.btn-hero-s{background:transparent;color:var(--text);border:1.5px solid var(--border2)}.btn-hero-s:hover{background:var(--bg2)}
+
+/* ── LOGO STRIP ── */
+.logo-strip{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:22px 0;overflow:hidden;background:var(--white)}
+.logo-track{display:flex;gap:56px;align-items:center;animation:marquee 30s linear infinite;width:max-content}
+.logo-track:hover{animation-play-state:paused}
+@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.logo-item{flex-shrink:0;font-size:15px;font-weight:600;letter-spacing:-.03em;color:var(--text3);opacity:.55;white-space:nowrap;transition:opacity .2s}
+.logo-item:hover{opacity:1}
+
+/* ── SECTION HEADINGS ── */
+.s-label{font-size:11px;font-weight:600;letter-spacing:.11em;text-transform:uppercase;color:var(--text4);margin-bottom:18px}
+.s-heading{font-family:var(--serif);font-size:clamp(34px,5vw,58px);font-weight:400;letter-spacing:-.028em;line-height:1.1;color:var(--text);margin-bottom:56px;max-width:680px}
+
+/* ── FEATURES GRID ── */
+.features{padding:96px 32px;max-width:1120px;margin:0 auto}
+.feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.feat-card{background:var(--white);padding:42px 36px;transition:background .15s}.feat-card:hover{background:var(--bg)}
+.feat-n{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text4);margin-bottom:18px}
+.feat-title{font-family:var(--serif);font-size:22px;font-weight:400;letter-spacing:-.02em;line-height:1.28;color:var(--text);margin-bottom:13px}
+.feat-body{font-size:14px;color:var(--text2);line-height:1.68;font-weight:300}
+
+/* ── PLATFORM SECTION ── */
+.platform-sec{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:96px 32px}
+.plat-inner{max-width:1120px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:72px;align-items:start}
+.plat-bullets{margin-top:20px;display:flex;flex-direction:column;gap:14px}
+.plat-bullets li{display:flex;align-items:flex-start;gap:10px;font-size:14.5px;color:var(--text2);line-height:1.6;font-weight:300}
+.plat-bullets li::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--text3);flex-shrink:0;margin-top:8px}
+.wb{background:var(--white);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 6px 32px rgba(0,0,0,.07)}
+.wb-head{display:flex;border-bottom:1px solid var(--border);background:#f9f8f4}
+.wb-tab{padding:11px 18px;font-size:13px;font-weight:500;color:var(--text3);border-bottom:2.5px solid transparent;cursor:pointer;transition:color .12s,border-color .12s}
+.wb-tab.on{color:var(--text);border-bottom-color:var(--text)}.wb-tab:hover:not(.on){color:var(--text2)}
+.wb-body{padding:22px}
+.wb-lbl{font-size:10.5px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:var(--text4);margin-bottom:8px}
+.wb-box{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:13px 15px;font-size:13px;color:var(--text2);line-height:1.65;margin-bottom:14px;font-weight:300}
+.wb-var{display:inline-block;background:#f0ece2;border:1px solid var(--border2);border-radius:4px;padding:0 5px;font-size:11.5px;font-weight:600;color:var(--accent);letter-spacing:.01em}
+.wb-ask{display:flex;align-items:center;gap:9px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 15px;font-size:13px;color:var(--text3)}
+.wb-dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(135deg,#9ab4ec,#7b8cde);flex-shrink:0}
+.wb-foot{display:flex;justify-content:flex-end;gap:8px;padding:14px 22px;border-top:1px solid var(--border);background:#f9f8f4}
+.wb-btn{padding:6px 14px;border-radius:6px;font-size:12.5px;font-weight:500;border:1px solid var(--border);background:var(--white);color:var(--text2);transition:all .12s}.wb-btn:hover{background:var(--bg2)}
+.wb-btn-r{background:var(--text);color:var(--white);border-color:transparent}.wb-btn-r:hover{background:#2c2c20}
+
+/* ── TESTIMONIALS ── */
+.testi-sec{padding:96px 32px;max-width:1120px;margin:0 auto}
+.testi-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.testi-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:36px;display:flex;flex-direction:column;gap:20px;transition:border-color .15s,box-shadow .15s}
+.testi-card:hover{border-color:var(--border2);box-shadow:0 4px 20px rgba(0,0,0,.06)}
+.testi-co{font-size:16px;font-weight:700;letter-spacing:-.03em;color:var(--text3)}
+.testi-q{font-family:var(--serif);font-size:17px;font-style:italic;line-height:1.62;color:var(--text);flex:1}
+.testi-name{font-size:13px;font-weight:500;color:var(--text)}.testi-role{font-size:12.5px;color:var(--text3);margin-top:2px}
+.testi-read{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--text2);border:1px solid var(--border);padding:5px 12px;border-radius:6px;margin-top:4px;cursor:pointer;transition:all .12s;width:fit-content}
+.testi-read:hover{background:var(--bg2);border-color:var(--border2)}
+
+/* ── RESOURCES ── */
+.res-sec{background:var(--bg2);border-top:1px solid var(--border);padding:80px 32px}
+.res-inner{max-width:1120px;margin:0 auto}
+.res-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}
+.res-card{background:var(--white);border:1px solid var(--border);border-radius:13px;padding:28px;display:flex;flex-direction:column;gap:11px;cursor:pointer;transition:all .15s}
+.res-card:hover{border-color:var(--border2);box-shadow:0 4px 18px rgba(0,0,0,.06);transform:translateY(-2px)}
+.res-tag{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text4)}
+.res-title{font-size:15px;font-weight:500;color:var(--text);line-height:1.4;letter-spacing:-.01em}
+.res-arrow{margin-top:auto;color:var(--text4)}
+
+/* ── SOLUTIONS PAGE ── */
+.solutions-hero{padding:80px 32px 72px;max-width:1120px;margin:0 auto}
+.sol-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;max-width:1120px;margin:0 auto;padding:0 32px 80px}
+.sol-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:32px;cursor:pointer;transition:all .15s}
+.sol-card:hover{border-color:var(--border2);box-shadow:0 6px 24px rgba(0,0,0,.07);transform:translateY(-2px)}
+.sol-cat{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text4);margin-bottom:14px}
+.sol-title{font-family:var(--serif);font-size:22px;font-weight:400;letter-spacing:-.02em;line-height:1.3;color:var(--text);margin-bottom:12px}
+.sol-desc{font-size:13.5px;color:var(--text2);line-height:1.62;font-weight:300}
+
+/* ── PRICING PAGE ── */
+.pricing-hero{padding:80px 32px 64px;max-width:1120px;margin:0 auto;text-align:center}
+.pricing-hero .s-heading{margin:0 auto 16px;text-align:center;max-width:560px}
+.pricing-sub{font-size:16px;color:var(--text2);max-width:440px;margin:0 auto 52px;font-weight:300;line-height:1.7}
+.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;max-width:980px;margin:0 auto;padding:0 32px 80px}
+.price-card{background:var(--white);border:1.5px solid var(--border);border-radius:16px;padding:38px 32px;display:flex;flex-direction:column;gap:20px;transition:all .15s}
+.price-card:hover{border-color:var(--border2);box-shadow:0 6px 28px rgba(0,0,0,.08)}
+.price-card.featured{border-color:var(--text);background:var(--text);color:var(--white)}
+.price-card.featured .price-sub,.price-card.featured .price-feat{color:rgba(255,255,255,.65)}
+.price-card.featured .price-divider{background:rgba(255,255,255,.15)}
+.price-plan{font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text4)}
+.price-card.featured .price-plan{color:rgba(255,255,255,.6)}
+.price-amt{font-family:var(--serif);font-size:44px;font-weight:400;letter-spacing:-.04em;line-height:1;color:var(--text)}
+.price-card.featured .price-amt{color:var(--white)}
+.price-amt span{font-size:17px;font-family:var(--font);font-weight:400;opacity:.65}
+.price-sub{font-size:13px;color:var(--text3);margin-top:-6px;font-weight:300}
+.price-divider{height:1px;background:var(--border)}
+.price-feats{display:flex;flex-direction:column;gap:11px}
+.price-feat{font-size:13.5px;color:var(--text2);display:flex;align-items:flex-start;gap:9px;font-weight:300}
+.price-feat::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;margin-top:7px;opacity:.5}
+.price-cta{margin-top:auto;padding:10px 0;border-radius:8px;font-size:14px;font-weight:500;border:1.5px solid var(--border2);background:transparent;color:var(--text);transition:all .14s}
+.price-cta:hover{background:var(--bg2)}
+.price-card.featured .price-cta{background:var(--white);color:var(--text);border-color:transparent}
+.price-card.featured .price-cta:hover{background:#f0eee6}
+
+/* ── PLATFORM PAGE ── */
+.platform-page-hero{padding:80px 32px 72px;max-width:1120px;margin:0 auto}
+.plat-features{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:1120px;margin:0 auto;padding:0 32px 80px}
+.plat-feat-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:36px;transition:all .15s}
+.plat-feat-card:hover{border-color:var(--border2);box-shadow:0 4px 18px rgba(0,0,0,.06)}
+.plat-feat-icon{width:40px;height:40px;border-radius:10px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin-bottom:18px}
+.plat-feat-title{font-family:var(--serif);font-size:21px;font-weight:400;letter-spacing:-.02em;color:var(--text);margin-bottom:11px}
+.plat-feat-body{font-size:14px;color:var(--text2);line-height:1.68;font-weight:300}
+
+/* ── ABOUT PAGE ── */
+.about-hero{padding:88px 32px 72px;max-width:1120px;margin:0 auto}
+.about-mission{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:80px 32px}
+.about-mission-inner{max-width:720px;margin:0 auto;text-align:center}
+.about-mission-q{font-family:var(--serif);font-size:clamp(22px,3.5vw,36px);font-style:italic;font-weight:400;line-height:1.4;color:var(--text);margin-bottom:24px}
+.about-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden;max-width:1120px;margin:0 auto;padding:0 32px 80px}
+.about-stat{background:var(--white);padding:40px 32px;text-align:center}
+.about-stat-n{font-family:var(--serif);font-size:48px;font-weight:400;letter-spacing:-.04em;color:var(--text);margin-bottom:8px}
+.about-stat-l{font-size:13px;color:var(--text3);font-weight:300}
+.team-sec{padding:80px 32px;max-width:1120px;margin:0 auto}
+.team-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}
+.team-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:32px;transition:all .15s}
+.team-card:hover{border-color:var(--border2);box-shadow:0 4px 18px rgba(0,0,0,.06)}
+.team-avatar{width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,#9ab4ec,#7b8cde);margin-bottom:18px;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:22px;color:#fff;font-style:italic}
+.team-name{font-size:15px;font-weight:600;letter-spacing:-.02em;color:var(--text);margin-bottom:4px}
+.team-role{font-size:13px;color:var(--text3);font-weight:300;margin-bottom:14px}
+.team-bio{font-size:13.5px;color:var(--text2);line-height:1.65;font-weight:300}
+
+/* ── BLOG PAGE ── */
+.blog-hero{padding:80px 32px 64px;max-width:1120px;margin:0 auto}
+.blog-grid{display:grid;grid-template-columns:2fr 1fr;gap:14px;max-width:1120px;margin:0 auto;padding:0 32px 80px}
+.blog-main{display:flex;flex-direction:column;gap:13px}
+.blog-featured{background:var(--white);border:1px solid var(--border);border-radius:16px;overflow:hidden;cursor:pointer;transition:all .15s}
+.blog-featured:hover{border-color:var(--border2);box-shadow:0 6px 28px rgba(0,0,0,.07)}
+.blog-feat-img{height:220px;background:linear-gradient(135deg,#e8e4da 0%,#d4cfc2 100%);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:48px;color:var(--text4);opacity:.4}
+.blog-feat-body{padding:32px}
+.blog-feat-tag{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+.blog-feat-title{font-family:var(--serif);font-size:clamp(20px,2.5vw,28px);font-weight:400;letter-spacing:-.025em;line-height:1.25;color:var(--text);margin-bottom:14px}
+.blog-feat-exc{font-size:14px;color:var(--text2);line-height:1.68;font-weight:300;margin-bottom:20px}
+.blog-meta{font-size:12.5px;color:var(--text4);display:flex;align-items:center;gap:12px}
+.blog-dot{width:3px;height:3px;border-radius:50%;background:var(--text4);display:inline-block}
+.blog-cards{display:flex;flex-direction:column;gap:13px}
+.blog-card{background:var(--white);border:1px solid var(--border);border-radius:13px;padding:24px;cursor:pointer;transition:all .15s}
+.blog-card:hover{border-color:var(--border2);box-shadow:0 3px 14px rgba(0,0,0,.05)}
+.blog-card-tag{font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text4);margin-bottom:8px}
+.blog-card-title{font-family:var(--serif);font-size:17px;font-weight:400;letter-spacing:-.02em;line-height:1.35;color:var(--text);margin-bottom:8px}
+.blog-card-exc{font-size:13px;color:var(--text2);line-height:1.6;font-weight:300;margin-bottom:14px}
+.blog-sidebar{display:flex;flex-direction:column;gap:13px}
+.sidebar-card{background:var(--white);border:1px solid var(--border);border-radius:13px;padding:24px}
+.sidebar-h{font-size:12px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text4);margin-bottom:16px}
+.sidebar-topics{display:flex;flex-wrap:wrap;gap:7px}
+.sidebar-tag{padding:5px 11px;border-radius:6px;font-size:12.5px;font-weight:500;background:var(--bg2);color:var(--text2);border:1px solid var(--border);cursor:pointer;transition:all .12s}
+.sidebar-tag:hover{background:var(--text);color:var(--white);border-color:transparent}
+.sidebar-posts{display:flex;flex-direction:column;gap:14px}
+.sidebar-post{display:flex;flex-direction:column;gap:4px;padding-bottom:14px;border-bottom:1px solid var(--border);cursor:pointer}
+.sidebar-post:last-child{border-bottom:none;padding-bottom:0}
+.sidebar-post-title{font-size:13.5px;font-weight:500;color:var(--text);letter-spacing:-.01em;line-height:1.4;transition:color .12s}
+.sidebar-post:hover .sidebar-post-title{color:var(--accent)}
+.sidebar-post-date{font-size:12px;color:var(--text4)}
+
+/* ── RESEARCH PAGE ── */
+.research-hero{padding:80px 32px 72px;max-width:1120px;margin:0 auto}
+.research-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;max-width:1120px;margin:0 auto;padding:0 32px 80px}
+.research-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:36px;display:flex;flex-direction:column;gap:16px;cursor:pointer;transition:all .15s}
+.research-card:hover{border-color:var(--border2);box-shadow:0 6px 24px rgba(0,0,0,.07)}
+.research-tag{font-size:10.5px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text4)}
+.research-title{font-family:var(--serif);font-size:22px;font-weight:400;letter-spacing:-.025em;line-height:1.28;color:var(--text)}
+.research-authors{font-size:12.5px;color:var(--text3);font-weight:300}
+.research-abs{font-size:13.5px;color:var(--text2);line-height:1.68;font-weight:300}
+.research-links{display:flex;gap:10px;margin-top:4px}
+.research-link{font-size:12.5px;font-weight:500;padding:5px 12px;border-radius:6px;border:1px solid var(--border);color:var(--text2);transition:all .12s}
+.research-link:hover{background:var(--bg2);border-color:var(--border2)}
+.research-link.primary{background:var(--text);color:var(--white);border-color:transparent}
+.research-link.primary:hover{background:#2c2c20}
+.research-areas{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:72px 32px}
+.research-areas-inner{max-width:1120px;margin:0 auto}
+.areas-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:13px;margin-top:0}
+.area-card{background:var(--white);border:1px solid var(--border);border-radius:12px;padding:28px 24px}
+.area-icon{width:36px;height:36px;border-radius:9px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.area-name{font-family:var(--serif);font-size:18px;font-weight:400;letter-spacing:-.02em;color:var(--text);margin-bottom:8px}
+.area-desc{font-size:13px;color:var(--text3);line-height:1.6;font-weight:300}
+
+/* ── CAREERS PAGE ── */
+.careers-hero{padding:80px 32px 72px;max-width:1120px;margin:0 auto}
+.careers-values{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:72px 32px}
+.careers-values-inner{max-width:1120px;margin:0 auto}
+.values-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:13px}
+.value-card{background:var(--white);border:1px solid var(--border);border-radius:13px;padding:30px 28px}
+.value-n{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text4);margin-bottom:14px}
+.value-title{font-family:var(--serif);font-size:20px;font-weight:400;letter-spacing:-.02em;color:var(--text);margin-bottom:11px}
+.value-desc{font-size:13.5px;color:var(--text2);line-height:1.65;font-weight:300}
+.jobs-sec{padding:72px 32px;max-width:1120px;margin:0 auto}
+.jobs-filter{display:flex;gap:8px;margin-bottom:28px;flex-wrap:wrap}
+.job-filter-btn{padding:6px 14px;border-radius:7px;font-size:13px;font-weight:500;border:1px solid var(--border);background:var(--white);color:var(--text2);cursor:pointer;transition:all .12s}
+.job-filter-btn.on,.job-filter-btn:hover{background:var(--text);color:var(--white);border-color:transparent}
+.jobs-list{display:flex;flex-direction:column;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:14px;overflow:hidden}
+.job-row{background:var(--white);padding:24px 28px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;transition:background .12s;gap:20px}
+.job-row:hover{background:var(--bg)}
+.job-title{font-size:15px;font-weight:500;letter-spacing:-.01em;color:var(--text);margin-bottom:5px}
+.job-dept{font-size:12.5px;color:var(--text3);font-weight:300}
+.job-tags{display:flex;gap:7px;flex-shrink:0}
+.job-tag{font-size:11.5px;font-weight:500;padding:4px 10px;border-radius:5px;background:var(--bg2);color:var(--text3);border:1px solid var(--border)}
+.job-arr{color:var(--text4);flex-shrink:0}
+
+/* ── DOCS PAGE ── */
+.docs-layout{display:grid;grid-template-columns:240px 1fr;gap:0;min-height:calc(100vh - var(--nav-h) - 44px);max-width:1120px;margin:0 auto;padding:0 32px 80px}
+.docs-sidebar{border-right:1px solid var(--border);padding:32px 24px 32px 0;position:sticky;top:calc(var(--nav-h) + 1px);height:fit-content}
+.docs-nav-h{font-size:11px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text4);margin-bottom:12px;margin-top:20px}
+.docs-nav-h:first-child{margin-top:0}
+.docs-nav-item{display:block;padding:6px 10px;border-radius:7px;font-size:13.5px;color:var(--text2);cursor:pointer;transition:background .1s,color .1s;font-weight:400;margin-bottom:2px}
+.docs-nav-item:hover,.docs-nav-item.on{background:var(--bg2);color:var(--text)}
+.docs-nav-item.on{font-weight:500}
+.docs-content{padding:40px 0 40px 44px}
+.docs-title{font-family:var(--serif);font-size:48px;font-weight:400;letter-spacing:-.03em;color:var(--text);margin-bottom:16px}
+.docs-lead{font-size:16px;color:var(--text2);line-height:1.72;font-weight:300;margin-bottom:40px;max-width:580px}
+.docs-cards{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;margin-bottom:40px}
+.docs-card{background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:24px;cursor:pointer;transition:all .14s}
+.docs-card:hover{border-color:var(--border2);background:var(--white)}
+.docs-card-icon{font-size:22px;margin-bottom:10px}
+.docs-card-title{font-size:14.5px;font-weight:500;color:var(--text);margin-bottom:6px;letter-spacing:-.01em}
+.docs-card-desc{font-size:13px;color:var(--text3);line-height:1.6;font-weight:300}
+.docs-code{background:#1e1d19;border-radius:12px;padding:24px;margin:0 0 28px;overflow:hidden}
+.docs-code pre{font-size:13px;line-height:1.7;color:#c8c5b8;font-family:'SF Mono','Fira Code',monospace;white-space:pre-wrap;word-break:break-all}
+.docs-code .kw{color:#9ab4ec}
+.docs-code .str{color:#c8dfa0}
+.docs-code .num{color:#e8b895}
+.docs-code .cm{color:#6c6a5e;font-style:italic}
+.docs-sec{margin-bottom:36px}
+.docs-sec h3{font-family:var(--serif);font-size:22px;font-weight:400;letter-spacing:-.02em;color:var(--text);margin-bottom:12px}
+.docs-sec p{font-size:14.5px;color:var(--text2);line-height:1.72;font-weight:300;margin-bottom:14px}
+.docs-sec ul{display:flex;flex-direction:column;gap:8px;margin-left:16px}
+.docs-sec ul li{font-size:14px;color:var(--text2);font-weight:300;list-style:disc;padding-left:4px}
+
+/* ── CONTACT PAGE ── */
+.contact-layout{display:grid;grid-template-columns:1fr 1fr;gap:72px;max-width:1120px;margin:0 auto;padding:80px 32px}
+.contact-info{padding-top:8px}
+.contact-info h1{font-family:var(--serif);font-size:clamp(34px,4.5vw,52px);font-weight:400;letter-spacing:-.03em;line-height:1.1;color:var(--text);margin-bottom:20px}
+.contact-info p{font-size:16px;color:var(--text2);line-height:1.72;font-weight:300;margin-bottom:40px}
+.contact-methods{display:flex;flex-direction:column;gap:16px}
+.contact-method{display:flex;align-items:flex-start;gap:14px;padding:20px;background:var(--white);border:1px solid var(--border);border-radius:12px}
+.contact-method-icon{width:36px;height:36px;border-radius:9px;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.contact-method-h{font-size:14px;font-weight:500;color:var(--text);margin-bottom:3px}
+.contact-method-d{font-size:13px;color:var(--text3);font-weight:300}
+.contact-form{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:40px}
+.form-group{margin-bottom:20px}
+.form-label{display:block;font-size:12.5px;font-weight:600;letter-spacing:.04em;color:var(--text2);margin-bottom:7px}
+.form-input{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font);color:var(--text);background:var(--bg);outline:none;transition:border-color .15s}
+.form-input:focus{border-color:var(--text);background:var(--white)}
+.form-input::placeholder{color:var(--text4)}
+textarea.form-input{height:120px;resize:vertical}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-submit{width:100%;padding:12px;border-radius:9px;font-size:14.5px;font-weight:500;background:var(--text);color:var(--white);border:none;transition:all .15s;letter-spacing:-.01em}
+.form-submit:hover{background:#2c2c20;box-shadow:0 4px 16px rgba(0,0,0,.18);transform:translateY(-1px)}
+.form-select{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:14px;font-family:var(--font);color:var(--text);background:var(--bg);outline:none;appearance:none;cursor:pointer;transition:border-color .15s}
+.form-select:focus{border-color:var(--text);background:var(--white)}
+
+/* ── FOOTER ── */
+footer{background:var(--white);border-top:1px solid var(--border);padding:56px 32px 36px}
+.foot-inner{max-width:1120px;margin:0 auto}
+.foot-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:44px;padding-bottom:28px;border-bottom:1px solid var(--border)}
+.foot-brand{display:flex;align-items:center;gap:9px;cursor:pointer}
+.foot-brand-name{font-size:17px;font-weight:600;letter-spacing:-.03em;color:var(--text)}
+.foot-socials{display:flex;gap:10px}
+.social-ico{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text3);transition:all .13s}
+.social-ico:hover{border-color:var(--border2);background:var(--bg2);color:var(--text)}
+.foot-cols{display:grid;grid-template-columns:repeat(5,1fr);gap:28px;margin-bottom:44px}
+.foot-col-h{font-size:11.5px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--text4);margin-bottom:14px}
+.foot-col-links{display:flex;flex-direction:column;gap:9px}
+.foot-col-links a{font-size:13.5px;color:var(--text2);transition:color .12s;cursor:pointer;font-weight:300}
+.foot-col-links a:hover{color:var(--text)}
+.foot-bottom{display:flex;align-items:center;justify-content:space-between;font-size:12.5px;color:var(--text4)}
+.foot-bottom-links{display:flex;gap:18px}
+.foot-bottom-links a{color:var(--text4);cursor:pointer;transition:color .12s}
+.foot-bottom-links a:hover{color:var(--text2)}
+
+.bf{display:block}
+
+@media(max-width:860px){
+  .feat-grid,.testi-grid,.res-grid,.sol-grid,.price-grid,.plat-features,.plat-inner{grid-template-columns:1fr}
+  .about-stats,.areas-grid{grid-template-columns:repeat(2,1fr)}
+  .team-grid,.values-grid,.research-grid{grid-template-columns:1fr}
+  .blog-grid,.contact-layout,.docs-layout{grid-template-columns:1fr}
+  .docs-sidebar{display:none}
+  .docs-content{padding:32px 0}
+  .docs-cards{grid-template-columns:1fr}
+  .form-row{grid-template-columns:1fr}
+  .foot-cols{grid-template-columns:repeat(2,1fr)}
+  nav .nav-links{display:none}
+  .gate-box{padding:44px 24px 36px}
+}
+</style>
+</head>
+<body>
+
+<!-- SVG defs — butterfly logo -->
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="r1" cx="28%" cy="28%" r="72%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#9ab4ec"/></radialGradient>
+    <radialGradient id="r2" cx="72%" cy="28%" r="72%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#9ab4ec"/></radialGradient>
+    <radialGradient id="r3" cx="28%" cy="72%" r="72%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#7ba4e8"/></radialGradient>
+    <radialGradient id="r4" cx="72%" cy="72%" r="72%"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#7ba4e8"/></radialGradient>
+  </defs>
+  <symbol id="bf" viewBox="0 0 100 100">
+    <path d="M50 45C43 25,17 16,10 30C4 43,18 62,50 49Z" fill="url(#r1)"/>
+    <path d="M50 45C57 25,83 16,90 30C96 43,82 62,50 49Z" fill="url(#r2)"/>
+    <path d="M50 54C38 58,16 71,21 82C27 91,44 86,50 60Z" fill="url(#r3)"/>
+    <path d="M50 54C62 58,84 71,79 82C73 91,56 86,50 60Z" fill="url(#r4)"/>
+    <ellipse cx="50" cy="51" rx="2.2" ry="9" fill="#c4d4f2" opacity=".85"/>
+  </symbol>
+</svg>
+
+<!-- ══════════ LOGIN GATE ══════════ -->
+<div id="gate">
+  <div class="gate-box">
+    <div class="gate-logo">
+      <svg width="36" height="36" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="gr1" cx="28%" cy="28%" r="72%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#9ab4ec"/></radialGradient>
+          <radialGradient id="gr2" cx="72%" cy="28%" r="72%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#9ab4ec"/></radialGradient>
+          <radialGradient id="gr3" cx="28%" cy="72%" r="72%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#7ba4e8"/></radialGradient>
+          <radialGradient id="gr4" cx="72%" cy="72%" r="72%"><stop offset="0%" stop-color="#fff"/><stop offset="100%" stop-color="#7ba4e8"/></radialGradient>
+        </defs>
+        <path d="M50 45C43 25,17 16,10 30C4 43,18 62,50 49Z" fill="url(#gr1)"/>
+        <path d="M50 45C57 25,83 16,90 30C96 43,82 62,50 49Z" fill="url(#gr2)"/>
+        <path d="M50 54C38 58,16 71,21 82C27 91,44 86,50 60Z" fill="url(#gr3)"/>
+        <path d="M50 54C62 58,84 71,79 82C73 91,56 86,50 60Z" fill="url(#gr4)"/>
+        <ellipse cx="50" cy="51" rx="2.2" ry="9" fill="#c4d4f2" opacity=".85"/>
+      </svg>
+      <span class="gate-logo-name">Area</span>
+    </div>
+    <h1 class="gate-title">Sign in to Area</h1>
+    <p class="gate-sub">Continue with your Google account to access the full platform.</p>
+    <div class="gate-rule"></div>
+    <div id="gate-err" class="gate-err"></div>
+    <button class="btn-g" id="btn-signin" onclick="doSignIn()">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+        <path d="M17.64 9.2045C17.64 8.5663 17.5827 7.9527 17.4764 7.3636H9V10.845H13.8436C13.635 11.97 13.0009 12.9231 12.0477 13.5613V15.8195H14.9564C16.6582 14.2527 17.64 11.9454 17.64 9.2045Z" fill="#4285F4"/>
+        <path d="M9 18C11.43 18 13.4673 17.1941 14.9564 15.8195L12.0477 13.5613C11.2418 14.1013 10.2109 14.4204 9 14.4204C6.65591 14.4204 4.67182 12.8372 3.96409 10.71H0.957275V13.0418C2.43818 15.9831 5.48182 18 9 18Z" fill="#34A853"/>
+        <path d="M3.96409 10.71C3.78409 10.17 3.68182 9.5931 3.68182 9C3.68182 8.4068 3.78409 7.83 3.96409 7.29V4.9581H0.957275C0.347727 6.1731 0 7.5477 0 9C0 10.4522 0.347727 11.8268 0.957275 13.0418L3.96409 10.71Z" fill="#FBBC05"/>
+        <path d="M9 3.5795C10.3214 3.5795 11.5077 4.0336 12.4405 4.9254L15.0218 2.344C13.4632 0.8918 11.4259 0 9 0C5.48182 0 2.43818 2.0168 0.957275 4.9581L3.96409 7.29C4.67182 5.1627 6.65591 3.5795 9 3.5795Z" fill="#EA4335"/>
+      </svg>
+      Continue with Google
+    </button>
+    <div id="gate-load" class="gate-load"><div class="spin"></div><span>Signing you in…</span></div>
+    <p class="gate-terms">By continuing, you agree to Area's <a onclick="goPage('about')">Terms</a> and <a onclick="goPage('about')">Privacy Policy</a>.</p>
+  </div>
+</div>
+
+<!-- ══════════ MAIN SITE ══════════ -->
+<div id="site">
+
+<nav>
+  <div class="nav-brand" onclick="goPage('home')">
+    <svg width="30" height="30" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      <path d="M50 45C43 25,17 16,10 30C4 43,18 62,50 49Z" fill="url(#gr1)"/>
+      <path d="M50 45C57 25,83 16,90 30C96 43,82 62,50 49Z" fill="url(#gr2)"/>
+      <path d="M50 54C38 58,16 71,21 82C27 91,44 86,50 60Z" fill="url(#gr3)"/>
+      <path d="M50 54C62 58,84 71,79 82C73 91,56 86,50 60Z" fill="url(#gr4)"/>
+      <ellipse cx="50" cy="51" rx="2.2" ry="9" fill="#c4d4f2" opacity=".85"/>
+    </svg>
+    <span class="nav-brand-name">Area</span>
+  </div>
+  <div class="nav-links">
+    <div class="nav-link" onclick="goPage('solutions')">Solutions <span class="ch">&#9660;</span>
+      <div class="dropdown">
+        <a onclick="goPage('solutions')">Customer Support</a>
+        <a onclick="goPage('solutions')">AI Agents</a>
+        <a onclick="goPage('solutions')">Coding</a>
+        <a onclick="goPage('solutions')">Education</a>
+        <a onclick="goPage('solutions')">Healthcare</a>
+        <a onclick="goPage('solutions')">Financial Services</a>
+      </div>
+    </div>
+    <div class="nav-link" onclick="goPage('platform')">Platform <span class="ch">&#9660;</span>
+      <div class="dropdown">
+        <a onclick="goPage('platform')">Overview</a>
+        <a onclick="goPage('docs')">Developer Docs</a>
+        <a onclick="goPage('platform')">Models</a>
+        <a onclick="goPage('platform')">API Reference</a>
+      </div>
+    </div>
+    <div class="nav-link" onclick="goPage('research')">Research</div>
+    <div class="nav-link" onclick="goPage('pricing')">Pricing</div>
+    <div class="nav-link">Company <span class="ch">&#9660;</span>
+      <div class="dropdown">
+        <a onclick="goPage('about')">About us</a>
+        <a onclick="goPage('blog')">Blog</a>
+        <a onclick="goPage('careers')">Careers</a>
+        <a onclick="goPage('contact')">Contact</a>
+      </div>
+    </div>
+  </div>
+  <div class="nav-actions">
+    <button class="btn btn-outline" onclick="goPage('contact')">Contact sales</button>
+    <button class="btn btn-dark" onclick="goPage('home')">Try Area</button>
+    <div class="u-wrap" id="u-wrap">
+      <div class="u-avatar" id="u-avatar"><span class="u-initial" id="u-initial">?</span></div>
+      <div class="u-drop">
+        <div class="u-info">
+          <div class="u-name" id="u-name">—</div>
+          <div class="u-email" id="u-email">—</div>
+        </div>
+        <a onclick="goPage('platform')"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><rect x="1" y="1" width="11" height="11" rx="2" stroke="currentColor" stroke-width="1.3"/><path d="M4.5 6.5h4M6.5 4.5v4" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>Console</a>
+        <a onclick="goPage('pricing')"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" stroke-width="1.3"/><path d="M6.5 4v3l1.5 1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>Billing</a>
+        <a class="u-out" onclick="doSignOut()"><svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M5 2H3a1 1 0 00-1 1v7a1 1 0 001 1h2M9 9.5l2.5-3L9 3.5M11.5 6.5H5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>Sign out</a>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<!-- HOME PAGE -->
+<div id="page-home" class="page">
+  <div class="breadcrumb"><span class="bc-link" onclick="goPage('solutions')">Solutions</span><span class="sep">/</span><span class="cur">Customer Support</span></div>
+  <section class="hero">
+    <h1>Build AI support agents<br>with a <em>more human touch</em></h1>
+    <p class="hero-sub">With enhanced reasoning and a natural conversational tone, Area uses your internal knowledge to take action across systems and tools — at scale.</p>
+    <div class="hero-ctas">
+      <button class="btn-hero btn-hero-p" onclick="goPage('platform')">Start building</button>
+      <button class="btn-hero btn-hero-s" onclick="goPage('contact')">Contact sales</button>
+    </div>
+  </section>
+  <div class="logo-strip">
+    <div class="logo-track">
+      <span class="logo-item">Assembled</span><span class="logo-item">Coinbase</span><span class="logo-item">Intercom</span><span class="logo-item">DoorDash</span><span class="logo-item">Lyft</span><span class="logo-item">Decagon</span><span class="logo-item">TurboTax</span><span class="logo-item">SK Telecom</span><span class="logo-item">Kodif</span><span class="logo-item">Asapp</span><span class="logo-item">University of San Francisco</span><span class="logo-item">Gradient Labs</span>
+      <span class="logo-item">Assembled</span><span class="logo-item">Coinbase</span><span class="logo-item">Intercom</span><span class="logo-item">DoorDash</span><span class="logo-item">Lyft</span><span class="logo-item">Decagon</span><span class="logo-item">TurboTax</span><span class="logo-item">SK Telecom</span><span class="logo-item">Kodif</span><span class="logo-item">Asapp</span><span class="logo-item">University of San Francisco</span><span class="logo-item">Gradient Labs</span>
+    </div>
+  </div>
+  <section class="features">
+    <div class="s-label">Why Area</div>
+    <h2 class="s-heading">Transform support experiences</h2>
+    <div class="feat-grid">
+      <div class="feat-card"><div class="feat-n">01</div><h3 class="feat-title">Intelligent conversation routing that actually works</h3><p class="feat-body">Area understands context and intent to route conversations to the right team or resolve them automatically — cutting wait times and reducing escalations.</p></div>
+      <div class="feat-card"><div class="feat-n">02</div><h3 class="feat-title">Personalized responses across every language and channel</h3><p class="feat-body">Area adapts tone, language, and depth based on your customer's needs and your brand guidelines, operating consistently across email, chat, and voice.</p></div>
+      <div class="feat-card"><div class="feat-n">03</div><h3 class="feat-title">Lower resolution times, higher customer satisfaction</h3><p class="feat-body">Automate high-volume inquiries, surface knowledge instantly, and give human agents the context they need to resolve complex issues faster every time.</p></div>
+    </div>
+  </section>
+  <section class="platform-sec">
+    <div class="plat-inner">
+      <div>
+        <div class="s-label">Developer Platform</div>
+        <h2 style="font-family:var(--serif);font-size:clamp(32px,4.2vw,50px);font-weight:400;letter-spacing:-.028em;line-height:1.18;color:var(--text);max-width:400px">Get to production faster</h2>
+        <p style="font-size:15px;color:var(--text2);margin-top:16px;line-height:1.7;font-weight:300">One platform to build, test, and iterate on your AI support deployment.</p>
+        <ul class="plat-bullets">
+          <li>Build faster with pre-built cookbooks and guides</li>
+          <li>Evaluate and improve prompts in the Workbench</li>
+          <li>Optimize for intelligence and cost with prompt caching</li>
+          <li>Monitor usage, logs, and performance in real time</li>
+        </ul>
+        <button class="btn btn-dark" style="margin-top:28px" onclick="goPage('platform')">Open Developer Console</button>
+      </div>
+      <div class="wb">
+        <div class="wb-head">
+          <div class="wb-tab on" onclick="wbTab(this)">Prompt</div>
+          <div class="wb-tab" onclick="wbTab(this)">System</div>
+          <div class="wb-tab" onclick="wbTab(this)">Output</div>
+        </div>
+        <div class="wb-body">
+          <div class="wb-lbl">User prompt</div>
+          <div class="wb-box">Classify the following support ticket into the most relevant category.<br><br>Categories: <span class="wb-var">{{CATEGORY_LIST}}</span><br><br>Ticket content: <span class="wb-var">{{TICKET_CONTENT}}</span></div>
+          <div class="wb-lbl">Improve prompt</div>
+          <div class="wb-ask"><div class="wb-dot"></div><span>Include a step-by-step rationale for the classification decision.</span></div>
+        </div>
+        <div class="wb-foot"><button class="wb-btn">Save draft</button><button class="wb-btn wb-btn-r">Run prompt</button></div>
+      </div>
+    </div>
+  </section>
+  <section class="testi-sec">
+    <h2 class="s-heading" style="margin-bottom:44px">What customer experience teams are saying</h2>
+    <div class="testi-grid">
+      <div class="testi-card"><div class="testi-co">Intercom</div><p class="testi-q">"We are not just automating customer service — we are elevating it to truly human quality. This lets support teams think more strategically about customer experience."</p><div><div class="testi-name">Fergal Reid</div><div class="testi-role">VP of AI, Intercom</div></div><div class="testi-read">Read story <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2.5 9.5L9.5 2.5M9.5 2.5H4.5M9.5 2.5V7.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="testi-card"><div class="testi-co">TurboTax</div><p class="testi-q">"Our partnership has been instrumental in pushing output quality for our customers. Direct access to expert researchers means we get the most out of the platform for financial use cases."</p><div><div class="testi-name">Nhung Ho</div><div class="testi-role">VP of AI, TurboTax</div></div></div>
+      <div class="testi-card"><div class="testi-co">Assembled</div><p class="testi-q">"The reasoning capabilities are significantly better and the conversational tone feels much more natural even out of the box. We are reevaluating our entire model infrastructure as a result."</p><div><div class="testi-name">John Wang</div><div class="testi-role">Co-founder, Assembled</div></div></div>
+      <div class="testi-card"><div class="testi-co">Decagon</div><p class="testi-q">"Uniquely skilled at understanding and following intricate, multi-step processes with high accuracy. It navigates nuanced business logic while catching errors before they happen."</p><div><div class="testi-name">Ashwin Sreenivas</div><div class="testi-role">CTO, Decagon</div></div></div>
+    </div>
+  </section>
+  <section class="res-sec">
+    <div class="res-inner">
+      <h2 class="s-heading" style="margin-bottom:32px">Everything you need to succeed</h2>
+      <div class="res-grid">
+        <div class="res-card" onclick="goPage('docs')"><span class="res-tag">Developer doc</span><span class="res-title">Get started with our API and integration guides</span><span class="res-arrow"><svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 13.5L13.5 3.5M13.5 3.5H7M13.5 3.5V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+        <div class="res-card" onclick="goPage('blog')"><span class="res-tag">Quickstart</span><span class="res-title">Build a customer support agent in under 30 minutes</span><span class="res-arrow"><svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 13.5L13.5 3.5M13.5 3.5H7M13.5 3.5V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+        <div class="res-card" onclick="goPage('about')"><span class="res-tag">Customer stories</span><span class="res-title">See how leading companies power support with Area</span><span class="res-arrow"><svg width="17" height="17" viewBox="0 0 17 17" fill="none"><path d="M3.5 13.5L13.5 3.5M13.5 3.5H7M13.5 3.5V10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- SOLUTIONS PAGE -->
+<div id="page-solutions" class="page">
+  <div class="breadcrumb"><span class="cur">Solutions</span></div>
+  <section class="solutions-hero">
+    <div class="s-label">Solutions</div>
+    <h1 style="font-family:var(--serif);font-size:clamp(36px,5vw,58px);font-weight:400;letter-spacing:-.035em;line-height:1.1;max-width:640px;margin-bottom:22px">AI built for every industry and workflow</h1>
+    <p style="font-size:17px;color:var(--text2);max-width:480px;line-height:1.7;font-weight:300">Area adapts to your specific use case — from automating customer interactions to accelerating developer productivity.</p>
+  </section>
+  <div class="sol-grid">
+    <div class="sol-card" onclick="goPage('home')"><div class="sol-cat">Industry</div><h3 class="sol-title">Customer Support</h3><p class="sol-desc">Intelligent routing, multilingual responses, and automated resolution across every channel your customers use.</p></div>
+    <div class="sol-card"><div class="sol-cat">Use case</div><h3 class="sol-title">AI Agents</h3><p class="sol-desc">Deploy autonomous agents that take action across your systems — from ticket creation to order management and beyond.</p></div>
+    <div class="sol-card"><div class="sol-cat">Use case</div><h3 class="sol-title">Coding</h3><p class="sol-desc">Accelerate development with code generation, review, debugging, and documentation that understands your codebase.</p></div>
+    <div class="sol-card"><div class="sol-cat">Industry</div><h3 class="sol-title">Healthcare</h3><p class="sol-desc">Support clinical workflows, patient communication, and medical documentation with accuracy and compliance in mind.</p></div>
+    <div class="sol-card"><div class="sol-cat">Industry</div><h3 class="sol-title">Financial Services</h3><p class="sol-desc">Automate document analysis, client communication, and compliance workflows with a model built for precision.</p></div>
+    <div class="sol-card"><div class="sol-cat">Industry</div><h3 class="sol-title">Education</h3><p class="sol-desc">Personalized tutoring, content generation, and administrative automation for institutions and learning platforms.</p></div>
+  </div>
+</div>
+
+<!-- PLATFORM PAGE -->
+<div id="page-platform" class="page">
+  <div class="breadcrumb"><span class="cur">Platform</span></div>
+  <section class="platform-page-hero">
+    <div class="s-label">Developer Platform</div>
+    <h1 style="font-family:var(--serif);font-size:clamp(36px,5vw,58px);font-weight:400;letter-spacing:-.035em;line-height:1.1;max-width:680px;margin-bottom:22px">One platform to build, test, and scale your AI</h1>
+    <p style="font-size:17px;color:var(--text2);max-width:480px;line-height:1.7;font-weight:300;margin-bottom:36px">Everything you need to integrate Area into your product — from first API call to production at scale.</p>
+    <div style="display:flex;gap:11px;flex-wrap:wrap"><button class="btn-hero btn-hero-p">Open Console</button><button class="btn-hero btn-hero-s" onclick="goPage('docs')">Read the docs</button></div>
+  </section>
+  <div class="plat-features">
+    <div class="plat-feat-card"><div class="plat-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3 5.5h12M3 9h12M3 12.5h7" stroke="#48483a" stroke-width="1.5" stroke-linecap="round"/></svg></div><h3 class="plat-feat-title">Prompt Workbench</h3><p class="plat-feat-body">Write, test, and iterate on prompts in a visual editor. Compare outputs side by side and save versioned drafts to your workspace.</p></div>
+    <div class="plat-feat-card"><div class="plat-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><circle cx="9" cy="9" r="6.5" stroke="#48483a" stroke-width="1.5"/><path d="M9 5.5v4l2.5 1.5" stroke="#48483a" stroke-width="1.4" stroke-linecap="round"/></svg></div><h3 class="plat-feat-title">Usage and Logs</h3><p class="plat-feat-body">Monitor token consumption, request latency, and error rates in real time. Export logs for compliance or debugging.</p></div>
+    <div class="plat-feat-card"><div class="plat-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="4.5" width="13" height="9" rx="2" stroke="#48483a" stroke-width="1.5"/><path d="M6 8h6M6 11h3" stroke="#48483a" stroke-width="1.3" stroke-linecap="round"/></svg></div><h3 class="plat-feat-title">Models and Versions</h3><p class="plat-feat-body">Access the full Area model family. Pin to specific versions for stability, or opt in to latest improvements as they ship.</p></div>
+    <div class="plat-feat-card"><div class="plat-feat-icon"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 9h10M9 4v10" stroke="#48483a" stroke-width="1.5" stroke-linecap="round"/><circle cx="9" cy="9" r="6.5" stroke="#48483a" stroke-width="1.5"/></svg></div><h3 class="plat-feat-title">API Keys and Permissions</h3><p class="plat-feat-body">Create scoped API keys per project or environment. Manage team access with role-based permissions across workspaces.</p></div>
+  </div>
+</div>
+
+<!-- PRICING PAGE -->
+<div id="page-pricing" class="page">
+  <div class="breadcrumb"><span class="cur">Pricing</span></div>
+  <section class="pricing-hero">
+    <div class="s-label">Pricing</div>
+    <h1 class="s-heading">Simple, transparent pricing</h1>
+    <p class="pricing-sub">Start for free. Scale as you grow. No hidden fees, no usage surprises.</p>
+  </section>
+  <div class="price-grid">
+    <div class="price-card"><div class="price-plan">Free</div><div class="price-amt">$0<span>/mo</span></div><div class="price-sub">For individuals and exploration</div><div class="price-divider"></div><ul class="price-feats"><li class="price-feat">Access to base models</li><li class="price-feat">100 messages per day</li><li class="price-feat">Standard API rate limits</li><li class="price-feat">Community support</li></ul><button class="price-cta">Get started free</button></div>
+    <div class="price-card featured"><div class="price-plan">Pro</div><div class="price-amt">$20<span>/mo</span></div><div class="price-sub">For professionals and teams</div><div class="price-divider"></div><ul class="price-feats"><li class="price-feat">All models including latest</li><li class="price-feat">Unlimited messages</li><li class="price-feat">Priority API access</li><li class="price-feat">Workbench and prompt tools</li><li class="price-feat">Email support</li></ul><button class="price-cta">Start free trial</button></div>
+    <div class="price-card"><div class="price-plan">Enterprise</div><div class="price-amt" style="font-size:32px;letter-spacing:-.02em">Custom</div><div class="price-sub">For large teams and compliance</div><div class="price-divider"></div><ul class="price-feats"><li class="price-feat">Dedicated capacity and SLA</li><li class="price-feat">Custom fine-tuning options</li><li class="price-feat">SSO, audit logs, DLP controls</li><li class="price-feat">Dedicated account manager</li><li class="price-feat">On-premise deployment options</li></ul><button class="price-cta" onclick="goPage('contact')">Contact sales</button></div>
+  </div>
+</div>
+
+<!-- ══════════════ NEW PAGES ══════════════ -->
+
+<!-- ABOUT PAGE -->
+<div id="page-about" class="page">
+  <div class="breadcrumb"><span class="cur">About</span></div>
+  <section class="about-hero">
+    <div class="s-label">About Area</div>
+    <h1 style="font-family:var(--serif);font-size:clamp(38px,5.5vw,62px);font-weight:400;letter-spacing:-.035em;line-height:1.08;max-width:700px;margin-bottom:24px">We believe AI should feel <em style="font-style:italic;color:var(--text3)">genuinely human</em></h1>
+    <p style="font-size:17px;color:var(--text2);max-width:540px;line-height:1.72;font-weight:300">Area was founded on a simple premise: that AI-powered customer interactions should be indistinguishable from the best human support experience. We build models and tools for teams who refuse to compromise on quality.</p>
+  </section>
+  <section class="about-mission">
+    <div class="about-mission-inner">
+      <div class="s-label" style="text-align:center">Our mission</div>
+      <p class="about-mission-q">"To make every customer interaction feel personal, thoughtful, and genuinely helpful — regardless of scale."</p>
+      <p style="font-size:14.5px;color:var(--text3);font-weight:300;line-height:1.7">We started in 2022 with a small team of researchers and engineers who believed that language models could do far more than answer FAQs. Today, Area powers millions of support interactions daily across industries from fintech to healthcare — all while maintaining the quality and care of a human expert.</p>
+    </div>
+  </section>
+  <div class="about-stats" style="margin-top:0;padding-top:0;border-top:none">
+    <div class="about-stat"><div class="about-stat-n">50M+</div><div class="about-stat-l">Conversations handled monthly</div></div>
+    <div class="about-stat"><div class="about-stat-n">99.4%</div><div class="about-stat-l">Uptime across all regions</div></div>
+    <div class="about-stat"><div class="about-stat-n">140+</div><div class="about-stat-l">Enterprise customers</div></div>
+    <div class="about-stat"><div class="about-stat-n">38</div><div class="about-stat-l">Languages supported</div></div>
+  </div>
+  <section class="team-sec">
+    <div class="s-label">The team</div>
+    <h2 class="s-heading" style="margin-bottom:36px">Built by people who care deeply</h2>
+    <div class="team-grid">
+      <div class="team-card"><div class="team-avatar">S</div><div class="team-name">Sarah Chen</div><div class="team-role">Co-founder & CEO</div><p class="team-bio">Former ML lead at Google Brain. PhD in computational linguistics from Stanford. Believes AI empathy isn't just possible — it's necessary.</p></div>
+      <div class="team-card"><div class="team-avatar">M</div><div class="team-name">Marcus Osei</div><div class="team-role">Co-founder & CTO</div><p class="team-bio">Ex-infrastructure architect at Stripe. Obsessed with systems that just work at any scale, without sacrificing the details that matter most.</p></div>
+      <div class="team-card"><div class="team-avatar">P</div><div class="team-name">Priya Nair</div><div class="team-role">Head of Research</div><p class="team-bio">Led RLHF research at DeepMind. Her team develops the training methods that make Area feel more human with every new model generation.</p></div>
+      <div class="team-card"><div class="team-avatar">J</div><div class="team-name">Jonas Weber</div><div class="team-role">Head of Design</div><p class="team-bio">Spent a decade at IDEO and Figma designing products people love. Brought the idea that every pixel in a developer console can feel considered.</p></div>
+      <div class="team-card"><div class="team-avatar">A</div><div class="team-name">Amara Diallo</div><div class="team-role">VP of Customer Success</div><p class="team-bio">Ran global support operations at Zendesk for 8 years. Joins customers where they are and stays until the work is really done.</p></div>
+      <div class="team-card"><div class="team-avatar">R</div><div class="team-name">Rafael Costa</div><div class="team-role">VP of Engineering</div><p class="team-bio">Built distributed systems at Netflix and Cloudflare. Keeps Area's infrastructure running reliably so engineers can focus on building things people love.</p></div>
+    </div>
+  </section>
+</div>
+
+<!-- BLOG PAGE -->
+<div id="page-blog" class="page">
+  <div class="breadcrumb"><span class="cur">Blog</span></div>
+  <section class="blog-hero">
+    <div class="s-label">Blog</div>
+    <h1 style="font-family:var(--serif);font-size:clamp(34px,4.8vw,56px);font-weight:400;letter-spacing:-.035em;line-height:1.1;max-width:640px;margin-bottom:20px">Ideas, research, and updates from Area</h1>
+    <p style="font-size:16px;color:var(--text2);font-weight:300;line-height:1.7;max-width:480px">Deep dives on AI, customer experience, and the future of work. Written by our researchers, engineers, and the teams who use Area every day.</p>
+  </section>
+  <div class="blog-grid">
+    <div class="blog-main">
+      <div class="blog-featured">
+        <div class="blog-feat-img">✦</div>
+        <div class="blog-feat-body">
+          <div class="blog-feat-tag">Research</div>
+          <h2 class="blog-feat-title">Why reasoning, not retrieval, is the next frontier in customer AI</h2>
+          <p class="blog-feat-exc">RAG systems were a step forward. But the real unlock is models that can reason through ambiguity, hold long context, and know when they don't know — the same way your best support agent does.</p>
+          <div class="blog-meta"><span>Area Research Team</span><span class="blog-dot"></span><span>April 8, 2025</span><span class="blog-dot"></span><span>8 min read</span></div>
+        </div>
+      </div>
+      <div class="blog-cards">
+        <div class="blog-card"><div class="blog-card-tag">Product</div><h3 class="blog-card-title">Introducing the Area Workbench: prompt iteration, reimagined</h3><p class="blog-card-exc">The new Workbench brings side-by-side comparisons, diff views, and one-click prompt improvement suggestions to every team.</p><div class="blog-meta"><span>Product Team</span><span class="blog-dot"></span><span>Mar 28, 2025</span></div></div>
+        <div class="blog-card"><div class="blog-card-tag">Engineering</div><h3 class="blog-card-title">How we cut inference latency by 38% without touching our models</h3><p class="blog-card-exc">A deep dive into the infrastructure changes, batching strategies, and cache design that made our API feel noticeably faster.</p><div class="blog-meta"><span>Infrastructure Team</span><span class="blog-dot"></span><span>Mar 14, 2025</span></div></div>
+        <div class="blog-card"><div class="blog-card-tag">Customer story</div><h3 class="blog-card-title">How Intercom handled 3× ticket volume without hiring</h3><p class="blog-card-exc">The VP of AI at Intercom walks through how they deployed Area to handle volume spikes — and what surprised them about the results.</p><div class="blog-meta"><span>Fergal Reid, Intercom</span><span class="blog-dot"></span><span>Feb 27, 2025</span></div></div>
+      </div>
+    </div>
+    <div class="blog-sidebar">
+      <div class="sidebar-card">
+        <div class="sidebar-h">Topics</div>
+        <div class="sidebar-topics">
+          <span class="sidebar-tag">Research</span>
+          <span class="sidebar-tag">Product</span>
+          <span class="sidebar-tag">Engineering</span>
+          <span class="sidebar-tag">Customer stories</span>
+          <span class="sidebar-tag">AI agents</span>
+          <span class="sidebar-tag">Design</span>
+          <span class="sidebar-tag">Company</span>
+        </div>
+      </div>
+      <div class="sidebar-card">
+        <div class="sidebar-h">Recent posts</div>
+        <div class="sidebar-posts">
+          <div class="sidebar-post"><div class="sidebar-post-title">The case for uncertainty in AI responses</div><div class="sidebar-post-date">Apr 3, 2025</div></div>
+          <div class="sidebar-post"><div class="sidebar-post-title">Fine-tuning vs. prompting: when each wins</div><div class="sidebar-post-date">Mar 20, 2025</div></div>
+          <div class="sidebar-post"><div class="sidebar-post-title">Building multilingual support at scale</div><div class="sidebar-post-date">Mar 5, 2025</div></div>
+          <div class="sidebar-post"><div class="sidebar-post-title">Area's approach to safety in enterprise deployments</div><div class="sidebar-post-date">Feb 14, 2025</div></div>
+        </div>
+      </div>
+      <div class="sidebar-card">
+        <div class="sidebar-h">Newsletter</div>
+        <p style="font-size:13px;color:var(--text3);line-height:1.6;margin-bottom:14px;font-weight:300">New research and product updates, straight to your inbox. No noise.</p>
+        <input type="email" class="form-input" placeholder="you@company.com" style="margin-bottom:10px">
+        <button class="form-submit" style="font-size:13.5px;padding:9px">Subscribe</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RESEARCH PAGE -->
+<div id="page-research" class="page">
+  <div class="breadcrumb"><span class="cur">Research</span></div>
+  <section class="research-hero">
+    <div class="s-label">Research</div>
+    <h1 style="font-family:var(--serif);font-size:clamp(36px,5vw,58px);font-weight:400;letter-spacing:-.035em;line-height:1.1;max-width:640px;margin-bottom:22px">Advancing the science of <em style="font-style:italic;color:var(--text3)">AI alignment</em> and reasoning</h1>
+    <p style="font-size:17px;color:var(--text2);max-width:500px;line-height:1.7;font-weight:300;margin-bottom:36px">Our research team publishes openly on the methods behind Area's models — from RLHF techniques to interpretability and long-context reasoning.</p>
+    <button class="btn-hero btn-hero-p">View all publications</button>
+  </section>
+  <section class="research-areas">
+    <div class="research-areas-inner">
+      <div class="s-label">Areas of focus</div>
+      <h2 class="s-heading" style="margin-bottom:32px">What we study</h2>
+      <div class="areas-grid">
+        <div class="area-card"><div class="area-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="#48483a" stroke-width="1.3"/><path d="M8 4v4l2 2" stroke="#48483a" stroke-width="1.3" stroke-linecap="round"/></svg></div><div class="area-name">RLHF & Alignment</div><p class="area-desc">Training models to be helpful, harmless, and honest at enterprise scale.</p></div>
+        <div class="area-card"><div class="area-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 8h12M8 2v12" stroke="#48483a" stroke-width="1.3" stroke-linecap="round"/></svg></div><div class="area-name">Long-context Reasoning</div><p class="area-desc">Maintaining coherence and accuracy across very large context windows.</p></div>
+        <div class="area-card"><div class="area-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="2" width="12" height="12" rx="2" stroke="#48483a" stroke-width="1.3"/><path d="M5 8l2 2 4-4" stroke="#48483a" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="area-name">Interpretability</div><p class="area-desc">Understanding why models behave the way they do, at a mechanistic level.</p></div>
+        <div class="area-card"><div class="area-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="5" cy="8" r="2" stroke="#48483a" stroke-width="1.3"/><circle cx="11" cy="5" r="2" stroke="#48483a" stroke-width="1.3"/><circle cx="11" cy="11" r="2" stroke="#48483a" stroke-width="1.3"/><path d="M7 8h2M7.7 6.3l1.6-1.6M7.7 9.7l1.6 1.6" stroke="#48483a" stroke-width="1.2" stroke-linecap="round"/></svg></div><div class="area-name">Multi-agent Systems</div><p class="area-desc">Coordination, tool use, and reliability in agentic AI deployments.</p></div>
+      </div>
+    </div>
+  </section>
+  <div class="research-grid" style="margin-top:72px">
+    <div class="research-card"><div class="research-tag">Alignment · 2025</div><h3 class="research-title">Scalable Oversight via Debate for Long-Context Language Tasks</h3><p class="research-authors">Chen, S., Nair, P., Osei, M., et al. — Area Research</p><p class="research-abs">We demonstrate that debate-based oversight remains effective as context length scales beyond 200K tokens, outperforming prior weak supervision techniques on complex multi-hop tasks.</p><div class="research-links"><button class="research-link primary">Read paper</button><button class="research-link">Abstract</button><button class="research-link">GitHub</button></div></div>
+    <div class="research-card"><div class="research-tag">Reasoning · 2025</div><h3 class="research-title">Chain-of-Thought Faithfulness in Deployed Customer Support Models</h3><p class="research-authors">Nair, P., Lee, J., Williams, T. — Area Research</p><p class="research-abs">An empirical study of when chain-of-thought reasoning in production support systems diverges from model behavior — and practical mitigations for each failure mode.</p><div class="research-links"><button class="research-link primary">Read paper</button><button class="research-link">Abstract</button></div></div>
+    <div class="research-card"><div class="research-tag">Interpretability · 2024</div><h3 class="research-title">Feature Decomposition in Transformer Attention for Support Intent Classification</h3><p class="research-authors">Weber, K., Diallo, A., Nair, P. — Area Research</p><p class="research-abs">We introduce a decomposition method for attention heads that reliably identifies the features driving intent classification decisions, enabling targeted intervention without fine-tuning.</p><div class="research-links"><button class="research-link primary">Read paper</button><button class="research-link">Abstract</button><button class="research-link">Dataset</button></div></div>
+    <div class="research-card"><div class="research-tag">Agents · 2024</div><h3 class="research-title">Reliability Under Tool Failure: A Framework for Graceful Degradation in AI Agents</h3><p class="research-authors">Costa, R., Chen, S., Park, H. — Area Research</p><p class="research-abs">We present a framework for agentic systems to detect, classify, and recover from external tool failures mid-task — significantly improving end-to-end task success rates in enterprise environments.</p><div class="research-links"><button class="research-link primary">Read paper</button><button class="research-link">Abstract</button></div></div>
+  </div>
+</div>
+
+<!-- CAREERS PAGE -->
+<div id="page-careers" class="page">
+  <div class="breadcrumb"><span class="cur">Careers</span></div>
+  <section class="careers-hero">
+    <div class="s-label">Careers</div>
+    <h1 style="font-family:var(--serif);font-size:clamp(36px,5vw,58px);font-weight:400;letter-spacing:-.035em;line-height:1.1;max-width:640px;margin-bottom:22px">Work on problems that <em style="font-style:italic;color:var(--text3)">actually matter</em></h1>
+    <p style="font-size:17px;color:var(--text2);max-width:500px;line-height:1.72;font-weight:300;margin-bottom:36px">We're a team of researchers, engineers, and designers who believe AI can make every human interaction genuinely better. If that sounds like the work you want to do, come join us.</p>
+    <div style="display:flex;gap:11px;flex-wrap:wrap"><button class="btn-hero btn-hero-p">View open roles</button><button class="btn-hero btn-hero-s" onclick="goPage('about')">Meet the team</button></div>
+  </section>
+  <section class="careers-values">
+    <div class="careers-values-inner">
+      <div class="s-label">How we work</div>
+      <h2 class="s-heading" style="margin-bottom:32px">Our values, in practice</h2>
+      <div class="values-grid">
+        <div class="value-card"><div class="value-n">01</div><div class="value-title">Move with care</div><p class="value-desc">We move fast, but never recklessly. Every shipped decision should make things meaningfully better — for customers, for colleagues, and for the people AI eventually touches.</p></div>
+        <div class="value-card"><div class="value-n">02</div><div class="value-title">Own the outcome</div><p class="value-desc">We don't hand off problems. We stay with them until they're solved. If something breaks, we fix it — and we learn why it happened so it doesn't break the same way twice.</p></div>
+        <div class="value-card"><div class="value-n">03</div><div class="value-title">Build in the open</div><p class="value-desc">We share work early and often. We write things down. We give direct feedback and expect it back. Trust comes from transparency, not from comfort.</p></div>
+        <div class="value-card"><div class="value-n">04</div><div class="value-title">Stay curious</div><p class="value-desc">Our best breakthroughs come from people who ask uncomfortable questions. We reward intellectual honesty over confident-sounding agreement.</p></div>
+        <div class="value-card"><div class="value-n">05</div><div class="value-title">Care about craft</div><p class="value-desc">The details matter. A great API response, a clear error message, a well-structured research paper — all of it is worth getting right.</p></div>
+        <div class="value-card"><div class="value-n">06</div><div class="value-title">Long-term thinking</div><p class="value-desc">We optimize for a world where AI is genuinely beneficial over a long timeline, not just for the next quarter. That shapes every product and research decision we make.</p></div>
+      </div>
+    </div>
+  </section>
+  <section class="jobs-sec">
+    <div class="s-label">Open roles</div>
+    <h2 class="s-heading" style="margin-bottom:28px">We're hiring across the team</h2>
+    <div class="jobs-filter">
+      <button class="job-filter-btn on">All teams</button>
+      <button class="job-filter-btn">Research</button>
+      <button class="job-filter-btn">Engineering</button>
+      <button class="job-filter-btn">Design</button>
+      <button class="job-filter-btn">Sales</button>
+    </div>
+    <div class="jobs-list">
+      <div class="job-row"><div><div class="job-title">Research Scientist — Alignment</div><div class="job-dept">Research · San Francisco</div></div><div class="job-tags"><span class="job-tag">Full-time</span><span class="job-tag">On-site</span></div><div class="job-arr"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="job-row"><div><div class="job-title">Senior ML Engineer — Inference Systems</div><div class="job-dept">Engineering · San Francisco</div></div><div class="job-tags"><span class="job-tag">Full-time</span><span class="job-tag">Hybrid</span></div><div class="job-arr"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="job-row"><div><div class="job-title">Staff Software Engineer — Platform</div><div class="job-dept">Engineering · Remote</div></div><div class="job-tags"><span class="job-tag">Full-time</span><span class="job-tag">Remote</span></div><div class="job-arr"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="job-row"><div><div class="job-title">Product Designer — Developer Experience</div><div class="job-dept">Design · San Francisco</div></div><div class="job-tags"><span class="job-tag">Full-time</span><span class="job-tag">Hybrid</span></div><div class="job-arr"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="job-row"><div><div class="job-title">Enterprise Account Executive</div><div class="job-dept">Sales · New York</div></div><div class="job-tags"><span class="job-tag">Full-time</span><span class="job-tag">On-site</span></div><div class="job-arr"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+      <div class="job-row"><div><div class="job-title">Technical Program Manager</div><div class="job-dept">Operations · San Francisco</div></div><div class="job-tags"><span class="job-tag">Full-time</span><span class="job-tag">Hybrid</span></div><div class="job-arr"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 13L13 3M13 3H7M13 3V9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+    </div>
+  </section>
+</div>
+
+<!-- DOCS PAGE -->
+<div id="page-docs" class="page">
+  <div class="breadcrumb"><span class="bc-link" onclick="goPage('platform')">Platform</span><span class="sep">/</span><span class="cur">Documentation</span></div>
+  <div class="docs-layout">
+    <div class="docs-sidebar">
+      <div class="docs-nav-h">Getting started</div>
+      <div class="docs-nav-item on">Overview</div>
+      <div class="docs-nav-item">Quickstart</div>
+      <div class="docs-nav-item">Authentication</div>
+      <div class="docs-nav-item">Your first API call</div>
+      <div class="docs-nav-h">API reference</div>
+      <div class="docs-nav-item">Messages</div>
+      <div class="docs-nav-item">Models</div>
+      <div class="docs-nav-item">Streaming</div>
+      <div class="docs-nav-item">Tool use</div>
+      <div class="docs-nav-item">Batch API</div>
+      <div class="docs-nav-h">Guides</div>
+      <div class="docs-nav-item">Prompt engineering</div>
+      <div class="docs-nav-item">Agents & tools</div>
+      <div class="docs-nav-item">Long-context tasks</div>
+      <div class="docs-nav-item">Safety best practices</div>
+      <div class="docs-nav-h">SDKs</div>
+      <div class="docs-nav-item">Python</div>
+      <div class="docs-nav-item">TypeScript / Node</div>
+      <div class="docs-nav-item">REST</div>
+    </div>
+    <div class="docs-content">
+      <div class="s-label">Documentation</div>
+      <h1 class="docs-title">Welcome to Area</h1>
+      <p class="docs-lead">Everything you need to integrate Area into your application. Start with a simple API call, then graduate to agents, tool use, and long-context tasks at enterprise scale.</p>
+      <div class="docs-cards">
+        <div class="docs-card"><div class="docs-card-icon">⚡</div><div class="docs-card-title">Quickstart</div><div class="docs-card-desc">Make your first API call in under 5 minutes. No configuration needed.</div></div>
+        <div class="docs-card"><div class="docs-card-icon">📖</div><div class="docs-card-title">API Reference</div><div class="docs-card-desc">Full reference for every endpoint, parameter, and response type.</div></div>
+        <div class="docs-card"><div class="docs-card-icon">🤖</div><div class="docs-card-title">Build an Agent</div><div class="docs-card-desc">Use tool calling to build AI that takes action across your systems.</div></div>
+        <div class="docs-card"><div class="docs-card-icon">🛡️</div><div class="docs-card-title">Safety Guidelines</div><div class="docs-card-desc">Best practices for safe, reliable AI in production environments.</div></div>
+      </div>
+      <div class="docs-sec">
+        <h3>Your first API call</h3>
+        <p>Install the Area SDK and make a call to the Messages endpoint. You'll need an API key from your <span onclick="goPage('platform')" style="color:var(--accent);cursor:pointer;font-weight:500">developer console</span>.</p>
+      </div>
+      <div class="docs-code">
+        <pre><span class="cm"># Install the SDK</span>
+pip install area-sdk
+
+<span class="cm"># Make your first request</span>
+<span class="kw">from</span> area <span class="kw">import</span> Area
+
+client = Area(api_key=<span class="str">"your_api_key"</span>)
+
+message = client.messages.create(
+    model=<span class="str">"area-2-sonnet"</span>,
+    max_tokens=<span class="num">1024</span>,
+    messages=[
+        {<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: <span class="str">"Hello, how can you help me?"</span>}
+    ]
+)
+
+<span class="kw">print</span>(message.content[<span class="num">0</span>].text)</pre>
+      </div>
+      <div class="docs-sec">
+        <h3>Core concepts</h3>
+        <p>Before building, get familiar with these fundamentals:</p>
+        <ul>
+          <li><strong>Messages API</strong> — the primary interface for all conversations with Area models</li>
+          <li><strong>System prompts</strong> — give your model a persona, context, and instructions</li>
+          <li><strong>Tool use</strong> — let Area take actions in external systems</li>
+          <li><strong>Streaming</strong> — receive tokens as they're generated for better UX</li>
+          <li><strong>Prompt caching</strong> — reduce latency and cost on repeated context</li>
+        </ul>
+      </div>
+      <div class="docs-code">
+        <pre><span class="cm">// TypeScript example</span>
+<span class="kw">import</span> Area <span class="kw">from</span> <span class="str">'area-sdk'</span>;
+
+<span class="kw">const</span> client = <span class="kw">new</span> Area({ apiKey: process.env.AREA_API_KEY });
+
+<span class="kw">const</span> message = <span class="kw">await</span> client.messages.create({
+  model: <span class="str">'area-2-sonnet'</span>,
+  max_tokens: <span class="num">1024</span>,
+  system: <span class="str">'You are a helpful customer support agent for Acme Corp.'</span>,
+  messages: [{ role: <span class="str">'user'</span>, content: <span class="str">'I need help with my order'</span> }]
+});
+
+console.log(message.content[<span class="num">0</span>].text);</pre>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTACT PAGE -->
+<div id="page-contact" class="page">
+  <div class="breadcrumb"><span class="cur">Contact</span></div>
+  <div class="contact-layout">
+    <div class="contact-info">
+      <div class="s-label">Get in touch</div>
+      <h1>Let's talk about what Area can do for you</h1>
+      <p>Whether you're exploring AI for the first time or ready to deploy at scale, our team is here to help you find the right path forward.</p>
+      <div class="contact-methods">
+        <div class="contact-method">
+          <div class="contact-method-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2 4a1 1 0 011-1h10a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V4z" stroke="#48483a" stroke-width="1.3"/><path d="M2 4l6 5 6-5" stroke="#48483a" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+          <div><div class="contact-method-h">Email us</div><div class="contact-method-d"><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="0b636e6767644b6a796e6a256a62">[email&#160;protected]</a> — we reply within one business day</div></div>
+        </div>
+        <div class="contact-method">
+          <div class="contact-method-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 2a6 6 0 100 12A6 6 0 008 2z" stroke="#48483a" stroke-width="1.3"/><path d="M8 5.5v3l2 1.5" stroke="#48483a" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+          <div><div class="contact-method-h">Book a demo</div><div class="contact-method-d">30-minute live walkthrough with our solutions team</div></div>
+        </div>
+        <div class="contact-method">
+          <div class="contact-method-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M8 3v10" stroke="#48483a" stroke-width="1.3" stroke-linecap="round"/></svg></div>
+          <div><div class="contact-method-h">Enterprise sales</div><div class="contact-method-d">Custom contracts, SLAs, and dedicated support</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="contact-form">
+      <h2 style="font-family:var(--serif);font-size:24px;font-weight:400;letter-spacing:-.02em;color:var(--text);margin-bottom:28px">Send us a message</h2>
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">First name</label><input class="form-input" type="text" placeholder="Sarah"></div>
+        <div class="form-group"><label class="form-label">Last name</label><input class="form-input" type="text" placeholder="Chen"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Work email</label><input class="form-input" type="email" placeholder="you@company.com"></div>
+      <div class="form-group"><label class="form-label">Company</label><input class="form-input" type="text" placeholder="Acme Corp"></div>
+      <div class="form-group"><label class="form-label">What are you looking for?</label>
+        <select class="form-select">
+          <option value="">Select a topic</option>
+          <option>Customer support automation</option>
+          <option>AI agents / tool use</option>
+          <option>API access & pricing</option>
+          <option>Enterprise plan</option>
+          <option>Research partnership</option>
+          <option>Something else</option>
+        </select>
+      </div>
+      <div class="form-group"><label class="form-label">Message</label><textarea class="form-input" placeholder="Tell us a bit about your use case…"></textarea></div>
+      <button class="form-submit">Send message</button>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="foot-inner">
+    <div class="foot-top">
+      <div class="foot-brand" onclick="goPage('home')">
+        <svg width="28" height="28" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <path d="M50 45C43 25,17 16,10 30C4 43,18 62,50 49Z" fill="url(#gr1)"/>
+          <path d="M50 45C57 25,83 16,90 30C96 43,82 62,50 49Z" fill="url(#gr2)"/>
+          <path d="M50 54C38 58,16 71,21 82C27 91,44 86,50 60Z" fill="url(#gr3)"/>
+          <path d="M50 54C62 58,84 71,79 82C73 91,56 86,50 60Z" fill="url(#gr4)"/>
+          <ellipse cx="50" cy="51" rx="2.2" ry="9" fill="#c4d4f2" opacity=".85"/>
+        </svg>
+        <span class="foot-brand-name">Area</span>
+      </div>
+      <div class="foot-socials">
+        <a href="https://instagram.com/suthariya_sahil" target="_blank" rel="noopener" class="social-ico" title="Instagram"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="1.5" width="13" height="13" rx="3.5" stroke="currentColor" stroke-width="1.4"/><circle cx="8" cy="8" r="3" stroke="currentColor" stroke-width="1.4"/><circle cx="11.8" cy="4.2" r=".85" fill="currentColor"/></svg></a>
+        <a href="https://youtube.com/@dysahil.1" target="_blank" rel="noopener" class="social-ico" title="YouTube"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="13" height="9" rx="2.5" stroke="currentColor" stroke-width="1.4"/><path d="M6.5 6L10.5 8L6.5 10V6Z" fill="currentColor"/></svg></a>
+      </div>
+    </div>
+    <div class="foot-cols">
+      <div><div class="foot-col-h">Products</div><div class="foot-col-links"><a onclick="goPage('home')">Area AI</a><a onclick="goPage('platform')">Area Code</a><a onclick="goPage('platform')">Area API</a><a onclick="goPage('pricing')">Pro Plan</a><a onclick="goPage('pricing')">Enterprise</a></div></div>
+      <div><div class="foot-col-h">Solutions</div><div class="foot-col-links"><a onclick="goPage('home')">Customer Support</a><a onclick="goPage('solutions')">AI Agents</a><a onclick="goPage('solutions')">Coding</a><a onclick="goPage('solutions')">Healthcare</a><a onclick="goPage('solutions')">Finance</a></div></div>
+      <div><div class="foot-col-h">Platform</div><div class="foot-col-links"><a onclick="goPage('platform')">Overview</a><a onclick="goPage('docs')">Documentation</a><a onclick="goPage('platform')">API Reference</a><a onclick="goPage('platform')">Models</a><a onclick="goPage('pricing')">Pricing</a></div></div>
+      <div><div class="foot-col-h">Company</div><div class="foot-col-links"><a onclick="goPage('about')">About us</a><a onclick="goPage('blog')">Blog</a><a onclick="goPage('research')">Research</a><a onclick="goPage('careers')">Careers</a><a onclick="goPage('contact')">Contact</a></div></div>
+      <div><div class="foot-col-h">Legal</div><div class="foot-col-links"><a>Privacy policy</a><a>Terms of service</a><a>Usage policy</a><a>Security</a><a>Cookie settings</a></div></div>
+    </div>
+    <div class="foot-bottom">
+      <span>© 2025 Area. All rights reserved.</span>
+      <div class="foot-bottom-links"><a>Privacy</a><a>Terms</a><a>Cookies</a></div>
+    </div>
+  </div>
+</footer>
+
+</div><!-- /site -->
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+/* ── PAGE ROUTING ── */
+function goPage(id) {
+  document.querySelectorAll('.page').forEach(function(p) {
+    p.classList.remove('active','animate');
+    p.style.display = 'none';
+  });
+  var t = document.getElementById('page-' + id);
+  if (!t) return;
+  t.style.display = 'block';
+  requestAnimationFrame(function() { t.classList.add('active','animate'); });
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* ── WORKBENCH TABS ── */
+function wbTab(el) {
+  el.closest('.wb-head').querySelectorAll('.wb-tab').forEach(function(t){t.classList.remove('on');});
+  el.classList.add('on');
+}
+
+/* ── JOB FILTERS ── */
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('job-filter-btn')) {
+    document.querySelectorAll('.job-filter-btn').forEach(function(b){b.classList.remove('on');});
+    e.target.classList.add('on');
+  }
+});
+
+/* ── DOCS NAV ── */
+document.addEventListener('click', function(e) {
+  if (e.target.classList.contains('docs-nav-item')) {
+    document.querySelectorAll('.docs-nav-item').forEach(function(d){d.classList.remove('on');});
+    e.target.classList.add('on');
+  }
+});
+
+/* ── UI HELPERS ── */
+function setLoad(on) {
+  var btn = document.getElementById('btn-signin');
+  btn.disabled = on;
+  btn.style.opacity = on ? '.5' : '1';
+  var l = document.getElementById('gate-load');
+  on ? l.classList.add('on') : l.classList.remove('on');
+}
+function showErr(msg) {
+  var e = document.getElementById('gate-err');
+  e.textContent = msg; e.classList.add('on');
+}
+function clearErr() {
+  document.getElementById('gate-err').classList.remove('on');
+}
+
+/* ── DEMO BYPASS — lets you preview the site without Firebase ── */
+function demoSignIn() {
+  revealSite({ displayName:'Demo User', email:'demo@area.ai', photoURL:null });
+  document.getElementById('u-name').textContent = 'Demo User';
+  document.getElementById('u-initial').textContent = 'D';
+  /* show demo badge */
+  var badge = document.createElement('span');
+  badge.className = 'demo-badge';
+  badge.textContent = 'DEMO';
+  var nameEl = document.getElementById('u-name');
+  if (!nameEl.querySelector('.demo-badge')) nameEl.appendChild(badge);
+}
+
+/* ── REVEAL SITE after login ── */
+function revealSite(user) {
+  var name  = (user && user.displayName) ? user.displayName : 'User';
+  var email = (user && user.email)       ? user.email       : '';
+  var photo = (user && user.photoURL)    ? user.photoURL    : null;
+
+  document.getElementById('u-name').textContent    = name;
+  document.getElementById('u-email').textContent   = email;
+  document.getElementById('u-initial').textContent = name.charAt(0).toUpperCase();
+  if (photo) {
+    document.getElementById('u-avatar').innerHTML =
+      '<img src="'+photo+'" alt="'+name+'" referrerpolicy="no-referrer"/>';
+  }
+  goPage('home');
+  var gate = document.getElementById('gate');
+  var site = document.getElementById('site');
+  gate.classList.add('gate-out');
+  setTimeout(function() {
+    gate.classList.add('gate-gone');
+    site.classList.add('site-in');
+  }, 430);
+}
+
+/* ── RESET to gate on sign-out ── */
+function resetGate() {
+  var gate = document.getElementById('gate');
+  var site = document.getElementById('site');
+  site.classList.remove('site-in');
+  gate.classList.remove('gate-gone','gate-out');
+  setLoad(false); clearErr();
+}
+
+/* ── PLACEHOLDER ── */
+window.doSignIn  = function(){ showErr('Loading auth… please wait a moment and try again.'); };
+window.doSignOut = function(){};
+
+/* ── CHECK if Firebase config still has placeholder values ── */
+function isPlaceholderConfig(cfg) {
+  return !cfg.apiKey || cfg.apiKey.indexOf('YOUR_') === 0 ||
+         !cfg.projectId || cfg.projectId.indexOf('YOUR_') === 0;
+}
+
+/* ── INIT AUTH immediately (Firebase loaded via <script> tags in head) ── */
+document.addEventListener('DOMContentLoaded', function() {
+  if (typeof firebase === 'undefined') {
+    showErr('Could not load auth library. Check your connection and try again.');
+    return;
+  }
+  initAuth();
+});
+
+function initAuth() {
+  var cfg = {
+    apiKey:            "AIzaSyDWKzWwCgfU1i3S2zli2uJZXBayvKEjgZw",
+    authDomain:        "area-aed48.firebaseapp.com",
+    projectId:         "area-aed48",
+    storageBucket:     "area-aed48.firebasestorage.app",
+    messagingSenderId: "339315377211",
+    appId:             "1:339315377211:web:e1936b4a0a8fbecc35881e",
+    measurementId:     "G-DPKT0S4SBQ"
+  };
+
+  if (!firebase.apps.length) firebase.initializeApp(cfg);
+  var auth     = firebase.auth();
+  var provider = new firebase.auth.GoogleAuthProvider();
+
+  window.doSignIn = function() {
+    clearErr(); setLoad(true);
+    auth.signInWithPopup(provider).catch(function(err) {
+      setLoad(false);
+      var m = 'Sign-in failed. Please try again.';
+      if (err.code === 'auth/popup-closed-by-user')        m = 'Popup closed. Tap the button again.';
+      if (err.code === 'auth/popup-blocked')               m = 'Popup blocked. Allow popups for this page.';
+      if (err.code === 'auth/network-request-failed')      m = 'Network error. Check your connection.';
+      if (err.code === 'auth/unauthorized-domain')         m = 'This domain is not authorized. Add it to Firebase → Authentication → Authorized Domains.';
+      if (err.code === 'auth/invalid-api-key')             m = 'Invalid API key. Check your Firebase config values.';
+      showErr(m);
+    });
+  };
+
+  window.doSignOut = function() {
+    auth.signOut().then(function() {
+      resetGate();
+    });
+  };
+
+  auth.onAuthStateChanged(function(user) {
+    if (user) {
+      revealSite(user);
+    }
+  });
+}
+</script>
+</body>
+</html>
